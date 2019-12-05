@@ -29,9 +29,9 @@ def calcshape(model):
     return s
 
 def modify(model, n_NM):
-    s = calcshape(model)
     m = model.copy()
     for i in range(n_NM):
+        s = calcshape(m)
         flg = True
         while flg:
             type = random.randint(0, 1)
@@ -162,6 +162,7 @@ def NASH(model0, steps, deg, n_NM, epc_n, epc_f, lbd_b, lbd_f):
         for j in range(1, deg):
             print('step', i, 'deg', j)
             cur = modify(best[0], n_NM)
+            print(cur)
             model.append([cur, train(cur, epc_n, lbd_b, lbd_f)])
         best = max(model, key = lambda x: x[1])
         if (best[1] > tmp):
