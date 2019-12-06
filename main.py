@@ -33,8 +33,10 @@ def modify(model, n_NM):
     for i in range(n_NM):
         s = calcshape(m)
         flg = True
-        while flg:
-            type = random.randint(0, 1)
+        oloop = 0
+        while flg and oloop < 10000:
+            type = random.randint(0, 2)
+            oloop += 1
             if (type == 0):
                 p = random.randint(0, len(s) - 1)
                 if (p < len(s) - 1):
@@ -62,14 +64,18 @@ def modify(model, n_NM):
                     flg = False
                 else:
                     c1, h1, w1 = s[p]
-                    del(m[3 * p])
-                    del(m[3 * p])
                     c2 = random.randint(3, c1 + 3)
-                    while True:
+                    iloop = 0;
+                    while True and iloop < 10000:
                         x, y = random.randint(1, h1 // 2), random.randint(1, w1 // 2)
                         h2, w2 = h1 - x + 1, w1 - y + 1
+                        iloop += 1
                         if (h2 > 2 and w2 > 2):
                             break
+                    if (iloop == 10000):
+                        continue
+                    del(m[3 * p])
+                    del(m[3 * p])
                     st = random.randint(1, min(h2 - 2, w2 - 2))
                     kx, ky = random.randint(2, h2 - st), random.randint(2, w2 - st)
                     h2, w2 = (h2 - kx) // st + 1, (w2 - ky) // st + 1
@@ -125,6 +131,7 @@ def modify(model, n_NM):
 def test(model):
     tot = 0
     ac = 0
+    model.cuda()
     with torch.no_grad():
         for data, label in te_loader:
             data, label = tensor2cuda(data), tensor2cuda(label)
@@ -134,8 +141,11 @@ def test(model):
             ac += (mylabel == label).sum()
     return 100.0 * ac / tot
 
-def train(structure, epc, lbd_b, lbd_f, final = False):
-    model = nn.Sequential(*structure)
+def train(structure, epc, lbd_b, lbd_f, final = False, ismodule = False):
+    if ismodule:
+        model = structure
+    else:
+        model = nn.Sequential(*structure)
     opt = torch.optim.Adam(model.parameters(), lr = lbd_b)
     sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epc, lbd_f)
     model.cuda()
@@ -150,6 +160,8 @@ def train(structure, epc, lbd_b, lbd_f, final = False):
         if final:
             print(loss)
         sch.step()
+    if ismodule:
+        return test(model), model
     return test(model)
 
 def NASH(model0, steps, deg, n_NM, epc_n, epc_f, lbd_b, lbd_f):
@@ -162,18 +174,20 @@ def NASH(model0, steps, deg, n_NM, epc_n, epc_f, lbd_b, lbd_f):
         for j in range(1, deg):
             print('step', i, 'deg', j)
             cur = modify(best[0], n_NM)
-            print(cur)
+            #print(cur)
             model.append([cur, train(cur, epc_n, lbd_b, lbd_f)])
         best = max(model, key = lambda x: x[1])
         if (best[1] > tmp):
             tmp = best[1]
             print('cur best acc =', tmp)
             print('model =', best[0])
-            print('* saving model')
-            torch.save(best, 'epc%d.pth' % i)
-    best = [best[0], train(best[0], epc_f, lbd_b, lbd_f, True)]
-    print('best acc =', best[1])
-    print('model =', best[0])
+    print('*' * 20)
+    print('*' * 20)
+    print('*' * 20)
+    best = train(nn.Sequential(*best[0]), epc_f, lbd_b, lbd_f, True, True)
+    print('best acc =', best[0])
+    print('* saving model')
+    torch.save(best[1], 'best.model')
     return best
 
 if __name__ == '__main__':
@@ -187,7 +201,7 @@ if __name__ == '__main__':
     parse.add_argument("--epc_f", type = int, default = 1000, help = "final epochs")
     parse.add_argument("--lbd_b", type = float, default = 0.01, help = "lr in the beginning")
     parse.add_argument("--lbd_f", type = float, default = 0.001, help = "lr in the end")
-    parse.add_argument("--ckpt", type = str, help = "load the checkpoint for test")
+    parse.add_argument("--ckpt", type = str, help = "load saved model for test")
     parse.add_argument("--seed", type = int, default = 2018011309)
     args = parse.parse_args()
     torch.manual_seed(args.seed)
@@ -223,5 +237,6 @@ if __name__ == '__main__':
     if (args.ckpt == None):
         NASH(model0, args.steps, args.deg, args.n_NM, args.epc_n, args.epc_f, args.lbd_b, args.lbd_f)
     else:
-        model = torch.load(args.ckpt)
-        print(test, model)
+        model = torch.load(args.ckpt + ".model", map_location = lambda storage, loc : storage)
+        print(model)
+        print(test(model))
