@@ -35,7 +35,7 @@ def modify(model, n_NM):
         flg = True
         oloop = 0
         while flg and oloop < 10000:
-            type = random.randint(0, 2)
+            type = random.randint(0, 4)
             oloop += 1
             if (type == 0):
                 p = random.randint(0, len(s) - 1)
@@ -66,13 +66,13 @@ def modify(model, n_NM):
                     c1, h1, w1 = s[p]
                     c2 = random.randint(3, c1 + 3)
                     iloop = 0;
-                    while True and iloop < 10000:
+                    while True and iloop < 100000:
                         x, y = random.randint(1, h1 // 2), random.randint(1, w1 // 2)
                         h2, w2 = h1 - x + 1, w1 - y + 1
                         iloop += 1
                         if (h2 > 2 and w2 > 2):
                             break
-                    if (iloop == 10000):
+                    if (iloop == 100000):
                         continue
                     del(m[3 * p])
                     del(m[3 * p])
@@ -170,17 +170,16 @@ def NASH(model0, steps, deg, n_NM, epc_n, epc_f, lbd_b, lbd_f):
     for i in range(steps):
         print('*' * 20)
         print('round', i)
-        model = [best]
-        for j in range(1, deg):
+        model = []
+        for j in range(deg):
             print('step', i, 'deg', j)
             cur = modify(best[0], n_NM)
-            #print(cur)
             model.append([cur, train(cur, epc_n, lbd_b, lbd_f)])
         best = max(model, key = lambda x: x[1])
         if (best[1] > tmp):
             tmp = best[1]
-            print('cur best acc =', tmp)
-            print('model =', best[0])
+        print('cur best acc =', tmp)
+        print('model =', best[0])
     print('*' * 20)
     print('*' * 20)
     print('*' * 20)
