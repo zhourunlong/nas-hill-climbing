@@ -152,11 +152,8 @@ def test(model):
             ac += (mylabel == label).sum()
     return 100.0 * ac / tot
 
-def train(structure, epc, lbd_b, lbd_f, final = False, ismodule = False):
-    if ismodule:
-        model = structure
-    else:
-        model = nn.Sequential(*structure)
+def train(structure, epc, lbd_b, lbd_f):
+    model = nn.Sequential(*structure)
     opt = torch.optim.Adam(model.parameters(), lr = lbd_b)
     sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epc, lbd_f)
     model.cuda()
@@ -168,44 +165,16 @@ def train(structure, epc, lbd_b, lbd_f, final = False, ismodule = False):
             loss = nn.CrossEntropyLoss()(output, label)
             loss.backward()
             opt.step()
-        if final:
-            print(loss)
+        print(loss)
         sch.step()
-    if ismodule:
-        return test(model), model
+    torch.save(model, 'model.pth')
     return test(model)
-
-def NASH(model0, steps, deg, n_NM, epc_n, epc_f, lbd_b, lbd_f):
-    best = [model0, train(model0, epc_n, lbd_b, lbd_f)]
-    for i in range(steps):
-        print('*' * 20)
-        print('round', i)
-        model = []
-        for j in range(deg):
-            print('step', i, 'deg', j)
-            cur = modify(best[0], n_NM)
-            model.append([cur, train(cur, epc_n, lbd_b, lbd_f)])
-        best = max(model, key = lambda x: x[1])
-        print('cur acc =', best[1])
-        print('cur model =', best[0])
-    print('*' * 20)
-    print('*' * 20)
-    print('*' * 20)
-    best = train(nn.Sequential(*best[0]), epc_f, lbd_b, lbd_f, True, True)
-    print('best acc =', best[0])
-    print('* saving model')
-    torch.save(best[1], 'best.model')
-    return best
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
-    parse.add_argument("--batch_size", type = int, default = 1024)
+    parse.add_argument("--batch_size", type = int, default = 512)
     parse.add_argument("--id", type = int, default = 0, help = "gpu id")
-    parse.add_argument("--steps", type = int, default = 20, help = "climb hill steps")
-    parse.add_argument("--deg", type = int, default = 20, help = "number of children")
-    parse.add_argument("--n_NM", type = int, default = 2, help = "modifications each step")
-    parse.add_argument("--epc_n", type = int, default = 15, help = "epochs during climbing")
-    parse.add_argument("--epc_f", type = int, default = 1000, help = "final epochs")
+    parse.add_argument("--epc", type = int, default = 1000)
     parse.add_argument("--lbd_b", type = float, default = 0.01, help = "lr in the beginning")
     parse.add_argument("--lbd_f", type = float, default = 0.001, help = "lr in the end")
     parse.add_argument("--ckpt", type = str, help = "load saved model for test")
@@ -213,20 +182,7 @@ if __name__ == '__main__':
     args = parse.parse_args()
     torch.manual_seed(args.seed)
     random.seed(args.seed)
-    model0 = [
-            nn.Conv2d(3, 6, 2),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1), 2),
-            nn.Conv2d(6, 12, 4),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2), 2),
-            Reshape(-1, 12 * 6 * 6),
-            nn.Linear(12 * 6 * 6, 120),
-            nn.ReLU(),
-            nn.Linear(120, 84),
-            nn.ReLU(),
-            nn.Linear(84, 10)
-        ]
+    structure = [Conv2d(3, 6, kernel_size=(2, 2), stride=(1, 1)), ReLU(), MaxPool2d(kernel_size=(2, 1), stride=2, padding=0, dilation=1, ceil_mode=False), Conv2d(6, 12, kernel_size=(3, 5), stride=(1, 1), padding=(2, 3)), ReLU(), MaxPool2d(kernel_size=(2, 2), stride=3, padding=0, dilation=1, ceil_mode=False), Conv2d(12, 15, kernel_size=(2, 2), stride=(1, 1)), ReLU(), MaxPool2d(kernel_size=(2, 2), stride=3, padding=0, dilation=1, ceil_mode=False), Reshape(-1, 60), Linear(in_features=60, out_features=120, bias=True), ReLU(), Linear(in_features=120, out_features=84, bias=True), ReLU(), Linear(in_features=84, out_features=10, bias=True)]
     tr_trans = transforms.Compose([
             transforms.RandomCrop(32, padding = 4),
             transforms.ToTensor(),
@@ -241,9 +197,4 @@ if __name__ == '__main__':
     tr_loader = DataLoader(tr_dtset, batch_size = args.batch_size, shuffle = True, num_workers = 10)
     te_loader = DataLoader(te_dtset, batch_size = args.batch_size, num_workers = 10)
     torch.cuda.set_device(args.id)
-    if (args.ckpt == None):
-        NASH(model0, args.steps, args.deg, args.n_NM, args.epc_n, args.epc_f, args.lbd_b, args.lbd_f)
-    else:
-        model = torch.load(args.ckpt + ".model", map_location = lambda storage, loc : storage)
-        print(model)
-        print(test(model))
+    print(train(structure, args.epc, args.lbd_b, args.lbd_f))
